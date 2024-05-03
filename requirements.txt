@@ -1,0 +1,13 @@
+google-cloud-aiplatform
+python-dotenv
+psycopg2-binary
+tqdm
+pandas
+numpy
+chromadb
+langchain
+google-generativeai
+streamlit
+langchain-google-vertexai
+streamlit_oauth
+streamlit-extras
