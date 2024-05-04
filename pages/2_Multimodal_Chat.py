@@ -6,6 +6,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_google_vertexai import VertexAI
 from streamlit_extras.stylable_container import stylable_container
 
+from Realtor_Buddy import authentication
 from css_codes import file_uploader_css
 from data_processing.vector_db_service import get_chroma_persistent_client, get_all_metadata_df_from_vectordb
 from gemini.embedding_gen import embed_text_multimodal, \
@@ -136,10 +137,10 @@ def get_llm_response(user_input, chat_history_details):
 def st_mandatory_info_collection():
     all_metadata = get_all_metadata_df_from_vectordb() if "all_metadata" not in st.session_state else st.session_state.all_metadata
     st.session_state["all_metadata"] = all_metadata
-    loc = st.selectbox(label="Select Location", options=all_metadata['address_city_state'].unique(), index=4)
+    loc = st.selectbox(label="Select Location", options=all_metadata['address_city_state'].unique())
     propertytype = st.multiselect(label="Select Property Type",
                                   options=all_metadata[all_metadata['address_city_state'] == loc][
-                                      'propertytype'].unique(), default=['singleFamily', 'condo'])
+                                      'propertytype'].unique())
     price = st.slider(label="Select Price Range",
                       value=(300000.00, 500000.0), step=10000.0,
                       min_value=all_metadata[all_metadata['address_city_state'] == loc]['price_value'].min(),
@@ -180,85 +181,80 @@ def main():
     st.set_page_config("Realtor Buddy Multimodal Chat", layout="wide")
     st.header("Realtor Buddy Multimodal Chat")
 
-    uploaded_image = None
+    if "auth" not in st.session_state:
+        authentication()
+    else:
+        uploaded_image = None
+        # The main UI functionality starts from here
+        with st.sidebar:
+            st_mandatory_info_collection()
 
-    # TODO: Uncomment once the SSO issue is fixed
-    CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-    CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-    AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
-    TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-    REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
+        # prompt = st.chat_input(disabled=("location" not in st.session_state))
+        prompt = st.chat_input()
 
-    # The main UI functionality starts from here
-    with st.sidebar:
-        st_mandatory_info_collection()
+        st.session_state["uploaded_image"] = None
+        chat_col, summary_col = st.columns([5, 1])
 
-    # prompt = st.chat_input(disabled=("location" not in st.session_state))
-    prompt = st.chat_input()
-
-    st.session_state["uploaded_image"] = None
-    chat_col, summary_col = st.columns([5, 1])
-
-    with summary_col:
-        with stylable_container(
-                key="bottom_content_2",
-                css_styles="""
+        with summary_col:
+            with stylable_container(
+                    key="bottom_content_2",
+                    css_styles="""
+                        {
+                            position: fixed;
+                            bottom: 120px;
+                        }
+                        """,
+            ):
+                st.markdown(file_uploader_css, unsafe_allow_html=True)
+                st.session_state["uploaded_image"] = st.file_uploader("Upload Image")
+        with chat_col:
+            if "messages" not in st.session_state:
+                st.session_state["messages"] = [
                     {
-                        position: fixed;
-                        bottom: 120px;
+                        "role": "assistant",
+                        "content": "Hey there! I'm your real estate sidekick. Let's find your dream house today! "
+                                   "Please select the options on the left to start your search. "
+                                   "Tell us more about the look of the houses or upload in image. "
+                                   "I'll try my best to pull up relevant listings for you!"
                     }
-                    """,
-        ):
-            st.markdown(file_uploader_css, unsafe_allow_html=True)
-            st.session_state["uploaded_image"] = st.file_uploader("Upload Image")
-    with chat_col:
-        if "messages" not in st.session_state:
-            st.session_state["messages"] = [
-                {
-                    "role": "assistant",
-                    "content": "Hey there! I'm your real estate sidekick. Let's find your dream house today! "
-                               "Please select the options on the left to start your search. "
-                               "Tell us more about the look of the houses or upload in image. "
-                               "I'll try my best to pull up relevant listings for you!"
-                }
-            ]
-        for msg in st.session_state.messages:
-            if is_http_url(msg["content"]):
-                with st.chat_message(msg["role"]):
-                    st.image(msg["content"])
-            else:
-                st.chat_message(msg["role"]).write(msg["content"])
+                ]
+            for msg in st.session_state.messages:
+                if is_http_url(msg["content"]):
+                    with st.chat_message(msg["role"]):
+                        st.image(msg["content"])
+                else:
+                    st.chat_message(msg["role"]).write(msg["content"])
 
-        if ("location" in st.session_state):
-            if prompt:
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                st.chat_message("user").write(prompt)
+            if ("location" in st.session_state):
+                if prompt:
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    st.chat_message("user").write(prompt)
 
-                ai_responses, img_responses = get_llm_response(prompt, st.session_state.messages)
+                    ai_responses, img_responses = get_llm_response(prompt, st.session_state.messages)
 
-                if not ai_responses and not img_responses:
-                    st.chat_message("assistant").write("Sorry, we don't have any relevant listings to recommend. Can you please try other filters on the left panel?")
-                for ai_response, img_response in zip(ai_responses, img_responses):
-                    with st.chat_message("assistant"):
-                        st.image(img_response)
-                        st.write(ai_response)
+                    if not ai_responses and not img_responses:
+                        st.chat_message("assistant").write("Sorry, we don't have any relevant listings to recommend. Can you please try other filters on the left panel?")
+                    for ai_response, img_response in zip(ai_responses, img_responses):
+                        with st.chat_message("assistant"):
+                            st.image(img_response)
+                            st.write(ai_response)
 
-                        st.session_state.messages.append({"role": "assistant", "content": img_response})
-                        st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                            st.session_state.messages.append({"role": "assistant", "content": img_response})
+                            st.session_state.messages.append({"role": "assistant", "content": ai_response})
 
-    # with summary_col:
-    #     with stylable_container(
-    #             key="bottom_content",
-    #             css_styles="""
-    #                 {
-    #                     position: fixed;
-    #                     bottom: 240px;
-    #                 }
-    #                 """,
-    #     ):
-    #         st.markdown('**Chat summary so far**')
-    #         if 'chat_history' in st.session_state:
-    #             st.write(st.session_state['chat_history'])
+        # with summary_col:
+        #     with stylable_container(
+        #             key="bottom_content",
+        #             css_styles="""
+        #                 {
+        #                     position: fixed;
+        #                     bottom: 240px;
+        #                 }
+        #                 """,
+        #     ):
+        #         st.markdown('**Chat summary so far**')
+        #         if 'chat_history' in st.session_state:
+        #             st.write(st.session_state['chat_history'])
 
 
 if __name__ == "__main__":

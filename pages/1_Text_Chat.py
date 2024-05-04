@@ -8,6 +8,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_google_vertexai import VertexAI
 from streamlit_extras.stylable_container import stylable_container
 
+from Realtor_Buddy import authentication
 from data_processing.vector_db_service import get_chroma_persistent_client, get_all_metadata_df_from_vectordb
 from gemini.embedding_gen import gemini_text_embedding_function
 
@@ -118,10 +119,10 @@ def get_llm_response(user_question, chat_history_details, stream=True):
 def st_mandatory_info_collection():
     all_metadata = get_all_metadata_df_from_vectordb() if "all_metadata" not in st.session_state else st.session_state.all_metadata
     st.session_state["all_metadata"] = all_metadata
-    loc = st.selectbox(label="Select Location", options=all_metadata['address_city_state'].unique(), index=4)
+    loc = st.selectbox(label="Select Location", options=all_metadata['address_city_state'].unique())
     propertytype = st.multiselect(label="Select Property Type",
                                 options=all_metadata[all_metadata['address_city_state'] == loc][
-                                    'propertytype'].unique(), default=['singleFamily', 'condo'])
+                                    'propertytype'].unique())
     price = st.slider(label="Select Price Range",
                       value=(300000.00, 520000.0), step=10000.0,
                       min_value=all_metadata[all_metadata['address_city_state'] == loc]['price_value'].min(),
@@ -171,53 +172,51 @@ def main():
     st.set_page_config("Realtor Buddy Text Chat", layout="wide")
     st.header("Realtor Buddy Text Chat")
 
-    # TODO: Uncomment once the SSO issue is fixed
-    CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-    CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-    AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
-    TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-    REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
+    print("session state: ", st.session_state)
 
-    # The main UI functionality starts from here
-    with st.sidebar:
-        st_mandatory_info_collection()
+    if "auth" not in st.session_state:
+        authentication()
+    else:
+        # The main UI functionality starts from here
+        with st.sidebar:
+            st_mandatory_info_collection()
 
-    prompt = st.chat_input(disabled=("location" not in st.session_state))
+        prompt = st.chat_input(disabled=("location" not in st.session_state))
 
-    chat_col, summary_col = st.columns([5, 1])
-    with chat_col:
-        if "messages" not in st.session_state:
-            st.session_state["messages"] = [
-                {
-                    "role": "assistant",
-                    "content": "Hey there! I'm your real estate sidekick. Let's find your dream house today! "
-                               "Please select the options on the left to start your search."
-                }
-            ]
-        for msg in st.session_state.messages:
-            st.chat_message(msg["role"]).write(msg["content"])
-        if ("location" in st.session_state):
-            if prompt:
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                st.chat_message("user").write(prompt)
-
-                response = st.chat_message("assistant").write_stream(
-                    get_llm_response(prompt, st.session_state.messages))
-                st.session_state.messages.append({"role": "assistant", "content": response})
-
-    with summary_col:
-        with stylable_container(
-                key="bottom_content",
-                css_styles="""
+        chat_col, summary_col = st.columns([5, 1])
+        with chat_col:
+            if "messages" not in st.session_state:
+                st.session_state["messages"] = [
                     {
-                        position: fixed;
-                        bottom: 240px;
+                        "role": "assistant",
+                        "content": "Hey there! I'm your real estate sidekick. Let's find your dream house today! "
+                                   "Please select the options on the left to start your search."
                     }
-                    """,
-        ):
-            st.markdown('**Chat summary so far**')
-            if 'chat_history' in st.session_state:
-                st.write(st.session_state['chat_history'])
+                ]
+            for msg in st.session_state.messages:
+                st.chat_message(msg["role"]).write(msg["content"])
+            if ("location" in st.session_state):
+                if prompt:
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    st.chat_message("user").write(prompt)
+
+                    response = st.chat_message("assistant").write_stream(
+                        get_llm_response(prompt, st.session_state.messages))
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+
+        with summary_col:
+            with stylable_container(
+                    key="bottom_content",
+                    css_styles="""
+                        {
+                            position: fixed;
+                            bottom: 240px;
+                        }
+                        """,
+            ):
+                st.markdown('**Chat summary so far**')
+                if 'chat_history' in st.session_state:
+                    st.write(st.session_state['chat_history'])
 
     # if "auth" not in st.session_state:
     #     # create a button to start the OAuth2 flow
