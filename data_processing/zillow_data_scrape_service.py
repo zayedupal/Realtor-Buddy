@@ -8,7 +8,10 @@ import requests
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+from data_processing.s3_util import download_file_from_s3
+
 load_dotenv()
+TOP_CITY_LIST = "us_cities_table_for_georgia_top_cities"
 
 
 def get_property_details_by_zpid(zpid):
@@ -85,6 +88,7 @@ def get_listings_by_location_batch(
     # If you want the result as a JSON string
     # merged_json = json.dumps(merged_list)
     merged_json = data
+    os.makedirs(os.path.dirname(output_filename), exist_ok=True)
 
     # Save merged data to JSON file
     with open(output_filename, "w") as outfile:
@@ -97,13 +101,22 @@ def get_data_by_city(city, count):
     get_listings_by_location_batch(
         location=city,
         total_listings=count,
-        output_filename=f"data/georgia_top_cities/{city_formatted}_{count}_{datetime.date.today().strftime('%m-%d-%Y')}.json",
+        output_filename=f"data/{TOP_CITY_LIST}/"
+        f"{city_formatted}_{count}_{datetime.date.today().strftime('%m-%d-%Y')}.json",
     )
+
+
+def download_top_cities_data(top_city_list_name):
+    print("Downloading raw real-estate listing data, and the vector database.")
+    BUCKET_NAME = "real-estate-realtor-buddy"
+    S3_KEY_DOWNLOAD = f"{top_city_list_name}.csv"
+    DOWNLOAD_PATH = f"{S3_KEY_DOWNLOAD}"
+
+    download_file_from_s3(BUCKET_NAME, S3_KEY_DOWNLOAD, DOWNLOAD_PATH)
 
 
 if __name__ == "__main__":
-    top_cities_df = pd.read_csv(
-        "data/others/us-cities-table-for-georgia - top_cities.csv"
-    )
+    download_top_cities_data(TOP_CITY_LIST)
+    top_cities_df = pd.read_csv(f"{TOP_CITY_LIST}.csv")
     for city in tqdm(top_cities_df["top cities"].tolist()):
         get_data_by_city(city, count=1000)

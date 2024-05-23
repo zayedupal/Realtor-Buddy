@@ -162,6 +162,7 @@ cython_debug/
 /.env
 /data_processing/data/
 /data_processing/data.zip
+/data_processing/us_cities_table_for_georgia_top_cities.csv
 
 # mac specific
 .DS_Store

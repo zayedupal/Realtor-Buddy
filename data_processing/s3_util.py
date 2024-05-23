@@ -6,6 +6,24 @@ import boto3
 from botocore.exceptions import NoCredentialsError
 
 
+def download_file_from_s3(bucket_name, s3_key, download_path):
+    """
+    Downloads a file from s3 and puts in the desired location
+    Args:
+        bucket_name: real-estate-realtor-buddy
+        s3_key: us_cities_table_for_georgia_top_cities
+        download_path: /data/others/
+    Returns:
+    """
+    s3 = boto3.client('s3')
+    try:
+        print(f"Started downloading {s3_key} from {bucket_name} to {download_path}.")
+        s3.download_file(bucket_name, s3_key, download_path)
+        print(f"Downloaded {s3_key} from {bucket_name} to {download_path}")
+    except NoCredentialsError:
+        print("Credentials not available")
+
+
 def download_and_extract_s3_zip(bucket_name, s3_key, download_path, extract_to):
     """
     This function can download a zipped file from S3 and extract the content to a local directory
