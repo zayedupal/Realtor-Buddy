@@ -161,6 +161,7 @@ cython_debug/
 /gemini-real-estate-04675a7b3255-key.json
 /.env
 /data_processing/data/
+/data_processing/data.zip
 
 # mac specific
 .DS_Store

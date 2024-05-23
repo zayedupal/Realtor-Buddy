@@ -11,3 +11,4 @@ streamlit
 langchain-google-vertexai
 streamlit_oauth
 streamlit-extras
+boto3
