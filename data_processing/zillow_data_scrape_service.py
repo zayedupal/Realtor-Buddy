@@ -1,92 +1,122 @@
 import datetime
+import json
 import os
 import time
 
 import pandas as pd
 import requests
-import json
-from tqdm import tqdm
 from dotenv import load_dotenv
+from tqdm import tqdm
+
+from data_processing.s3_util import download_file_from_s3
 
 load_dotenv()
+TOP_CITY_LIST = "us_cities_table_for_georgia_top_cities"
+
 
 def get_property_details_by_zpid(zpid):
-	time.sleep(0.25)
-	url = "https://zillow-com4.p.rapidapi.com/properties/details"
+    time.sleep(0.25)
+    url = "https://zillow-com4.p.rapidapi.com/properties/details"
 
-	querystring = {"zpid": zpid}
+    querystring = {"zpid": zpid}
 
-	headers = {
-		"X-RapidAPI-Key": os.environ['RAPIDAPI_KEY'],
-		"X-RapidAPI-Host": "zillow-com4.p.rapidapi.com"
-	}
+    headers = {
+        "X-RapidAPI-Key": os.environ["RAPIDAPI_KEY"],
+        "X-RapidAPI-Host": "zillow-com4.p.rapidapi.com",
+    }
 
-	response = requests.get(url, headers=headers, params=querystring)
+    response = requests.get(url, headers=headers, params=querystring)
 
-	data = None
-	if response.status_code == 200:
-		try:
-			data = response.json()  # Parse JSON response (handle potential errors)
-		except json.JSONDecodeError:
-			print(f"Error: Could not parse JSON response for zpid in get_property_details_by_zpid: {zpid}")
-	else:
-		print(f"Error: API call failed in get_property_details_by_zpid with response: {response}\n")
+    data = None
+    if response.status_code == 200:
+        try:
+            data = response.json()  # Parse JSON response (handle potential errors)
+        except json.JSONDecodeError:
+            print(
+                f"Error: Could not parse JSON response for zpid in get_property_details_by_zpid: {zpid}"
+            )
+    else:
+        print(
+            f"Error: API call failed in get_property_details_by_zpid with response: {response}\n"
+        )
 
-	return data
+    return data
+
 
 def get_listing_by_location(location, resultsPerPage, page=1):
-	# time.sleep(0.5)
-	url = "https://zillow-com4.p.rapidapi.com/properties/search"
-	querystring = {
-		"location": location,
-		"resultsPerPage": resultsPerPage,
-		"page": page,
-		"status": "forSale",
-		"sort": "recentlyChanged"
-	}
+    # time.sleep(0.5)
+    url = "https://zillow-com4.p.rapidapi.com/properties/search"
+    querystring = {
+        "location": location,
+        "resultsPerPage": resultsPerPage,
+        "page": page,
+        "status": "forSale",
+        "sort": "recentlyChanged",
+    }
 
-	headers = {
-		"X-RapidAPI-Key": os.environ['RAPIDAPI_KEY'],
-		"X-RapidAPI-Host": "zillow-com4.p.rapidapi.com"
-	}
-	response = requests.get(url, headers=headers, params=querystring)
+    headers = {
+        "X-RapidAPI-Key": os.environ["RAPIDAPI_KEY"],
+        "X-RapidAPI-Host": "zillow-com4.p.rapidapi.com",
+    }
+    response = requests.get(url, headers=headers, params=querystring)
 
-	data = None
-	if response.status_code == 200:
-		try:
-			data = response.json()
-			# for each zpid get the property details
-			for prop in tqdm(data['data']):
-				prop_details = get_property_details_by_zpid(prop['zpid'])
-				prop['details'] = prop_details['data']
-		except json.JSONDecodeError:
-			print(f"Error: Could not parse JSON response in get_listing_by_location for iteration: {page}")
-	else:
-		print(f"Error: API call failed in get_listing_by_location with response: {response}\n")
+    data = None
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            # for each zpid get the property details
+            for prop in tqdm(data["data"]):
+                prop_details = get_property_details_by_zpid(prop["zpid"])
+                prop["details"] = prop_details["data"]
+        except json.JSONDecodeError:
+            print(
+                f"Error: Could not parse JSON response in get_listing_by_location for iteration: {page}"
+            )
+    else:
+        print(
+            f"Error: API call failed in get_listing_by_location with response: {response}\n"
+        )
 
-	return data
+    return data
 
-def get_listings_by_location_batch(location="New York, NY", total_listings=5000,
-								   output_filename="New York_NY.json"):
 
-	data = get_listing_by_location(location, total_listings)
+def get_listings_by_location_batch(
+    location="New York, NY", total_listings=5000, output_filename="New York_NY.json"
+):
+    data = get_listing_by_location(location, total_listings)
 
-	# If you want the result as a JSON string
-	# merged_json = json.dumps(merged_list)
-	merged_json = data
+    # If you want the result as a JSON string
+    # merged_json = json.dumps(merged_list)
+    merged_json = data
+    os.makedirs(os.path.dirname(output_filename), exist_ok=True)
 
-	# Save merged data to JSON file
-	with open(output_filename, 'w') as outfile:
-		json.dump(merged_json, outfile)
-		# outfile.write(merged_json)
+    # Save merged data to JSON file
+    with open(output_filename, "w") as outfile:
+        json.dump(merged_json, outfile)
+    # outfile.write(merged_json)
+
 
 def get_data_by_city(city, count):
-	city_formatted = city.replace(",", "_")
-	get_listings_by_location_batch(location=city, total_listings=count,
-								   output_filename=f"data/{city_formatted}_{count}_{datetime.date.today().strftime('%m-%d-%Y')}.json")
+    city_formatted = city.replace(",", "_")
+    get_listings_by_location_batch(
+        location=city,
+        total_listings=count,
+        output_filename=f"data/{TOP_CITY_LIST}/"
+        f"{city_formatted}_{count}_{datetime.date.today().strftime('%m-%d-%Y')}.json",
+    )
 
-if __name__ == '__main__':
-	top_cities_df = pd.read_csv("data/others/us-cities-table-for-georgia - top_cities.csv")
-	for city in tqdm(top_cities_df['top cities'].tolist()):
-		get_data_by_city(city, count=1000)
 
+def download_top_cities_data(top_city_list_name):
+    print("Downloading raw real-estate listing data, and the vector database.")
+    BUCKET_NAME = "real-estate-realtor-buddy"
+    S3_KEY_DOWNLOAD = f"{top_city_list_name}.csv"
+    DOWNLOAD_PATH = f"{S3_KEY_DOWNLOAD}"
+
+    download_file_from_s3(BUCKET_NAME, S3_KEY_DOWNLOAD, DOWNLOAD_PATH)
+
+
+if __name__ == "__main__":
+    download_top_cities_data(TOP_CITY_LIST)
+    top_cities_df = pd.read_csv(f"{TOP_CITY_LIST}.csv")
+    for city in tqdm(top_cities_df["top cities"].tolist()):
+        get_data_by_city(city, count=1000)
